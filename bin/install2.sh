@@ -8,7 +8,6 @@ OS=`uname -s`
 MACHINE=`uname -m`
 EXT=
 print($OS)
-read -n 1 -s
 
 if [ $OS = Linux ] ; then
   if [ $MACHINE = i386 -o $MACHINE = i486 -o $MACHINE = i586 -o $MACHINE = i686 ] ; then

@@ -556,30 +556,30 @@ if __name__ == "__main__":
 
     ftc = Client()
 
-    print 'Trying to connect to buffer on %s:%i ...' % (hostname, port)
+    print("Trying to connect to buffer on %s:%i ...") % (hostname, port)
     ftc.connect(hostname, port)
 
-    print '\nConnected - trying to read header...'
+    print('\nConnected - trying to read header...')
     H = ftc.getHeader()
 
     if H is None:
-        print 'Failed!'
+        print('Failed!')
     else:
-        print H
-        print H.labels
+        print(H)
+        print(H.labels)
 
         if H.nSamples > 0:
-            print '\nTrying to read last sample...'
+            print('\nTrying to read last sample...')
             index = H.nSamples - 1
             D = ftc.getData([index, index])
-            print D
+            print(D)
 
         if H.nEvents > 0:
-            print '\nTrying to read (all) events...'
+            print('\nTrying to read (all) events...')
             E = ftc.getEvents()
             for e in E:
-                print e
+                print(e)
 
-    print ftc.poll()
+    print(ftc.poll())
 
     ftc.disconnect()

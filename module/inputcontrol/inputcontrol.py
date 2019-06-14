@@ -1,80 +1,77 @@
-#!/usr/bin/env python
-
-# This module allows the user to design a graphical interface with dials (knobs), sliders and buttons.
-#
-# This software is part of the EEGsynth project, see https://github.com/eegsynth/eegsynth
-#
-# Copyright (C) 2019 EEGsynth project
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
 from PyQt4.QtGui import *
 from PyQt4.QtCore import *
 import configparser
-import argparse
-import os
 import redis
 import sys
-import time
+import EEGsynth
 import signal
 
-if hasattr(sys, 'frozen'):
-    basis = sys.executable
-elif sys.argv[0] != '':
-    basis = sys.argv[0]
-else:
-    basis = './'
-installed_folder = os.path.split(basis)[0]
 
-# eegsynth/lib contains shared modules
-sys.path.insert(0,os.path.join(installed_folder, '../../lib'))
-import EEGsynth
+def sigint_handler(*args):
+    # close the application cleanly
+    QApplication.quit()
 
-parser = argparse.ArgumentParser()
-parser.add_argument('-i', '--inifile', default=os.path.join(installed_folder, os.path.splitext(os.path.basename(__file__))[0] + '.ini'), help='optional name of the configuration file')
-args = parser.parse_args()
 
-config = configparser.ConfigParser(inline_comment_prefixes=('#', ';'))
-config.read(args.inifile)
+class InputControlWindow(QWidget):
 
-try:
-    r = redis.StrictRedis(host=config.get('redis','hostname'), port=config.getint('redis','port'), db=0)
-    response = r.client_list()
-except redis.ConnectionError:
-    print('Error: cannot connect to redis server')
-    exit()
+    def __init__(self, inifilepath):
 
-# combine the patching from the configuration file and Redis
-patch = EEGsynth.patch(config, r)
+        print("""
+                # This module allows the user to design a graphical interface with dials (knobs), sliders and buttons.
+                #
+                # This software is part of the EEGsynth project, see https://github.com/eegsynth/eegsynth
+                #
+                # Copyright (C) 2019 EEGsynth project
+                #
+                # This program is free software: you can redistribute it and/or modify
+                # it under the terms of the GNU General Public License as published by
+                # the Free Software Foundation, either version 3 of the License, or
+                # (at your option) any later version.
+                #
+                # This program is distributed in the hope that it will be useful,
+                # but WITHOUT ANY WARRANTY; without even the implied warranty of
+                # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+                # GNU General Public License for more details.
+                #
+                # You should have received a copy of the GNU General Public License
+                # along with this program.  If not, see <http://www.gnu.org/licenses/>.
+                """)
 
-# this determines how much debugging information gets printed
-debug           = patch.getint('general', 'debug')
-prefix          = patch.getstring('output', 'prefix')
-output_scale    = patch.getfloat('output', 'scale', default=1./127)
-output_offset   = patch.getfloat('output', 'offset', default=0.)
-winx            = patch.getfloat('display', 'xpos')
-winy            = patch.getfloat('display', 'ypos')
-winwidth        = patch.getfloat('display', 'width')
-winheight       = patch.getfloat('display', 'height')
+        # Must construct a QApplication before a QPaintDevice
+        self.app = QApplication(sys.argv)
 
-class Window(QWidget):
-    def __init__(self):
-        super(Window, self).__init__()
-        self.setGeometry(winx, winy, winwidth, winheight)
+        super(InputControlWindow, self).__init__()
+
+        self.config = configparser.ConfigParser(inline_comment_prefixes=('#', ';'))
+        self.config.read(inifilepath)
+
+        try:
+            r = redis.StrictRedis(host=self.config.get('redis', 'hostname'), port=self.config.getint('redis', 'port'), db=0)
+            response = r.client_list()
+            print('Connected to redis server: {}'.format(response[0]['addr']))
+
+        except redis.ConnectionError:
+            print('Error: Could not connect to redis server')
+            exit()
+
+        # combine the patching from the configuration file and Redis
+        self.patch = EEGsynth.patch(self.config, r)
+
+        # this determines how much debugging information gets printed
+        self.debug = self.patch.getint('general', 'debug')
+        self.prefix = self.patch.getstring('output', 'prefix')
+        self.output_scale = self.patch.getfloat('output', 'scale', default=1. / 127)
+        self.output_offset = self.patch.getfloat('output', 'offset', default=0.)
+        self.winx = self.patch.getfloat('display', 'xpos')
+        self.winy = self.patch.getfloat('display', 'ypos')
+        self.winwidth = self.patch.getfloat('display', 'width')
+        self.winheight = self.patch.getfloat('display', 'height')
+
+        self.setGeometry(self.winx, self.winy, self.winwidth, self.winheight)
         self.setStyleSheet('background-color:black;');
         self.setWindowTitle('EEGsynth inputcontrol')
         self.drawmain()
+
 
     # each row or column with sliders/dials/buttons is a panel
     def drawpanel(self, panel, list):
@@ -82,10 +79,10 @@ class Window(QWidget):
 
             try:
                 # read the previous value from Redis
-                key = '%s.%s' % (prefix, item[0])
-                val = float(patch.redis.get(key))
+                key = '%s.%s' % (self.prefix, item[0])
+                val = float(self.patch.redis.get(key))
                 # sliders and dials have an internal value between 0 and 127
-                val = int(EEGsynth.rescale(val, slope=output_scale, offset=output_offset, reverse=True))
+                val = int(EEGsynth.rescale(val, slope=self.output_scale, offset=self.output_offset, reverse=True))
                 # buttons have an internal value of 0, 1, 2, 3, 4
                 if item[1]=='slap':
                     val = int(1. * val / 127.)
@@ -196,31 +193,31 @@ class Window(QWidget):
         # the section 'slider' is treated as the first row
         # this is only for backward compatibility
         section = 'slider'
-        if config.has_section(section):
+        if self.config.has_section(section):
             sectionlayout = QHBoxLayout()
-            self.drawpanel(sectionlayout, config.items(section))
+            self.drawpanel(sectionlayout, self.config.items(section))
             leftlayout.addLayout(sectionlayout)
 
         for row in range(0,16):
             section = 'row%d' % (row+1)
-            if config.has_section(section):
+            if self.config.has_section(section):
                 sectionlayout = QHBoxLayout()
-                self.drawpanel(sectionlayout, config.items(section))
+                self.drawpanel(sectionlayout, self.config.items(section))
                 leftlayout.addLayout(sectionlayout)
 
         # the section 'button' is treated as the first column
         # this is only for backward compatibility
         section = 'button'
-        if config.has_section(section):
+        if self.config.has_section(section):
             sectionlayout = QVBoxLayout()
-            self.drawpanel(sectionlayout, config.items(section))
+            self.drawpanel(sectionlayout, self.config.items(section))
             rightlayout.addLayout(sectionlayout)
 
         for column in range(0,16):
             section = 'column%d' % (column+1)
-            if config.has_section(section):
+            if self.config.has_section(section):
                 sectionlayout = QVBoxLayout()
-                self.drawpanel(sectionlayout, config.items(section))
+                self.drawpanel(sectionlayout, self.config.items(section))
                 rightlayout.addLayout(sectionlayout)
 
 
@@ -257,9 +254,9 @@ class Window(QWidget):
             val = target.value * 127 / 4
         self.setcolor(target)
         if send:
-            key = '%s.%s' % (prefix, target.name)
-            val = EEGsynth.rescale(val, slope=output_scale, offset=output_offset)
-            patch.setvalue(key, val, debug=debug)
+            key = '%s.%s' % (self.prefix, target.name)
+            val = EEGsynth.rescale(val, slope=self.output_scale, offset=self.output_offset)
+            self.patch.setvalue(key, val, debug=self.debug)
 
     def setcolor(self, target):
         # see https://www.w3schools.com/css/css3_buttons.asp
@@ -314,20 +311,16 @@ class Window(QWidget):
         elif target.type=='slap' or target.type=='push':
             target.setStyleSheet(grey);
 
-def sigint_handler(*args):
-    # close the application cleanly
-    QApplication.quit()
+    def start(self):
 
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    signal.signal(signal.SIGINT, sigint_handler)
+        signal.signal(signal.SIGINT, sigint_handler)
 
-    # Let the interpreter run every 200 ms
-    # see https://stackoverflow.com/questions/4938723/what-is-the-correct-way-to-make-my-pyqt-application-quit-when-killed-from-the-co/6072360#6072360
-    timer = QTimer()
-    timer.start(400)
-    timer.timeout.connect(lambda: None)
+        # Let the interpreter run every 200 ms
+        # see https://stackoverflow.com/questions/4938723/what-is-the-correct-way-to-make-my-pyqt-application-quit-when-killed-from-the-co/6072360#6072360
+        timer = QTimer()
+        timer.start(400)
+        timer.timeout.connect(lambda: None)
+        #
+        self.show()
+        sys.exit(self.app.exec_())
 
-    ex = Window()
-    ex.show()
-    sys.exit(app.exec_())

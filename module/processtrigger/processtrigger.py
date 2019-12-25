@@ -101,7 +101,7 @@ for item in config.items('initial'):
 # get the input variables
 if len(config.items('input')):
     input_name, input_variable = list(zip(*config.items('input')))
-else:
+else:r
     input_name, input_variable = ([], [])
 
 # get the output equations for each trigger

@@ -311,6 +311,9 @@ try:
             scale = patch.getfloat('scale', name, default=127)
             offset = patch.getfloat('offset', name, default=0)
             val = EEGsynth.rescale(val, slope=scale, offset=offset)
+            print("scaling", name, "with ", scale)
+            print("offsetting", name, "with ", offset)
+
             with lock:
                 sendMidi(name, code, val)
 

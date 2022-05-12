@@ -167,10 +167,10 @@ def _loop_once():
                 labels = f.getSignalTextLabels()
 
                 # read all the data from the file
-                data_A = np.ndarray(shape=(filecount_A, H.nSamples, H.nChannels), dtype=np.float32)
+                data_A = np.ndarray(shape=(filecount_A, H.nChannels, H.nSamples), dtype=np.float32)
                 for chanindx in range(H.nChannels):
                     monitor.debug('reading channel ' + str(chanindx))
-                    data_A[filenr, :, chanindx] = f.readSignal(chanindx)
+                    data_A[filenr, chanindx, :] = f.readSignal(chanindx).T
                 f.close()
 
         filecount_B = len(glob.glob(filepath_B))
@@ -196,10 +196,10 @@ def _loop_once():
                 labels = f.getSignalTextLabels()
 
                 # read all the data from the file
-                data_B = np.ndarray(shape=(filecount_B, H.nSamples, H.nChannels), dtype=np.float32)
+                data_B = np.ndarray(shape=(filecount_B, H.nChannels, H.nSamples), dtype=np.float32)
                 for chanindx in range(H.nChannels):
                     monitor.debug('reading channel ' + str(chanindx))
-                    data_B[filenr, :, chanindx] = f.readSignal(chanindx)
+                    data_B[filenr, chanindx, :] = f.readSignal(chanindx).T
                 f.close()
 
 
@@ -229,7 +229,11 @@ def _loop_once():
     monitor.info('Starting filter')
     filters = CSP(data_A, data_B)
     monitor.info('Filter done')
-    print(len(filters))
+    monitor.info('%d filters' % len(filters))
+
+    for i, a in enumerate(filters[0]):
+        monitor.info('Dimension {0} has length {1}'.format(i, len(a)))
+
 
     monitor.debug('nChannels = ' + str(H.nChannels))
     monitor.debug('nSamples = ' + str(H.nSamples))
@@ -265,39 +269,41 @@ def _stop():
     sys.exit()
 
 def CSP(*tasks):
-	if len(tasks) < 2:
-		print("Must have at least 2 tasks for filtering.")
-		return (None,) * len(tasks)
-	else:
-		filters = ()
-		# CSP algorithm
-		# For each task x, find the mean variances Rx and not_Rx, which will be used to compute spatial filter SFx
-		iterator = range(0,len(tasks))
-		for x in iterator:
-			# Find Rx
-			Rx = covarianceMatrix(tasks[x][0])
-			for t in range(1,len(tasks[x])):
-				Rx += covarianceMatrix(tasks[x][t])
-			Rx = Rx / len(tasks[x])
+    if len(tasks) < 2:
+        print("Must have at least 2 tasks for filtering.")
+        return (None,) * len(tasks)
+    else:
+        filters = ()
+        # CSP algorithm
+        # For each task x, find the mean variances Rx and not_Rx, which will be used to compute spatial filter SFx
+        iterator = range(0,len(tasks))
+        for x in iterator:
+            # Find Rx
+            Rx = covarianceMatrix(tasks[x][0])
+            for t in range(1,len(tasks[x])):
+                Rx += covarianceMatrix(tasks[x][t])
+            Rx = Rx / len(tasks[x])
 
-			# Find not_Rx
-			count = 0
-			not_Rx = Rx * 0
-			for not_x in [element for element in iterator if element != x]:
-				for t in range(0,len(tasks[not_x])):
-					not_Rx += covarianceMatrix(tasks[not_x][t])
-					count += 1
-			not_Rx = not_Rx / count
-
+            # Find not_Rx
+            count = 0
+            not_Rx = Rx * 0
+            for not_x in [element for element in iterator if element != x]:
+                for t in range(0,len(tasks[not_x])):
+                    not_Rx += covarianceMatrix(tasks[not_x][t])
+                    count += 1
+            not_Rx = not_Rx / count
+            print(Rx)
+            print("---")
+            print(not_Rx)
 			# Find the spatial filter SFx
-			SFx = spatialFilter(Rx,not_Rx)
-			filters += (SFx,)
+            SFx = spatialFilter(Rx,not_Rx)
+            filters += (SFx,)
 
 			# Special case: only two tasks, no need to compute any more mean variances
-			if len(tasks) == 2:
-				filters += (spatialFilter(not_Rx,Rx),)
-				break
-		return filters
+            if len(tasks) == 2:
+                filters += (spatialFilter(not_Rx,Rx),)
+                break
+            return filters
 
 # covarianceMatrix takes a matrix A and returns the covariance matrix, scaled by the variance
 def covarianceMatrix(A):

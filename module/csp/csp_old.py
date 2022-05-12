@@ -144,8 +144,7 @@ def _loop_once():
     global data_B, filepath_B
 
     if fileformat == 'edf':
-        filecount_A = len(glob.glob(filepath_A))
-        monitor.info('Condition A: found %d files' % filecount_A)
+
         for filenr, filename in enumerate(glob.glob(filepath_A)):
             with open(filename, 'r') as f:
                 monitor.info('Condition A: adding file ' + filename)
@@ -167,14 +166,18 @@ def _loop_once():
                 labels = f.getSignalTextLabels()
 
                 # read all the data from the file
-                data_A = np.ndarray(shape=(filecount_A, H.nSamples, H.nChannels), dtype=np.float32)
+                temp_A = np.ndarray(shape=(H.nSamples, H.nChannels), dtype=np.float32)
                 for chanindx in range(H.nChannels):
                     monitor.debug('reading channel ' + str(chanindx))
-                    data_A[filenr, :, chanindx] = f.readSignal(chanindx)
+                    temp_A[:, chanindx] = f.readSignal(chanindx)
                 f.close()
 
-        filecount_B = len(glob.glob(filepath_B))
-        monitor.info('Condition A: found %d files' % filecount_B)
+                # concatinate data from files
+                if filenr > 0:
+                    data_A = np.concatenate((data_A, temp_A))
+                else:
+                    data_A = temp_A
+
         for filenr, filename in enumerate(glob.glob(filepath_B)):
             with open(filename, 'r') as f:
                 monitor.info('Condition B: adding file ' + filename)
@@ -196,40 +199,34 @@ def _loop_once():
                 labels = f.getSignalTextLabels()
 
                 # read all the data from the file
-                data_B = np.ndarray(shape=(filecount_B, H.nSamples, H.nChannels), dtype=np.float32)
+                temp_B = np.ndarray(shape=(H.nSamples, H.nChannels), dtype=np.float32)
                 for chanindx in range(H.nChannels):
                     monitor.debug('reading channel ' + str(chanindx))
-                    data_B[filenr, :, chanindx] = f.readSignal(chanindx)
+                    temp_B[:, chanindx] = f.readSignal(chanindx)
                 f.close()
 
+                # concatinate data from files
+                if filenr > 0:
+                    data_B = np.concatenate((data_B, temp_B))
+                else:
+                    data_B = temp_B
 
     else:
         raise NotImplementedError('unsupported file format')
 
-    if data_A.shape[1] > data_B.shape[1]:
-        monitor.info('Condition A has %d more samples that Condition B! Trimming Condition B data to size.' % (data_A.shape[1] - data_B.shape[1]))
-        data_A = data_A[:, 0:data_B.shape[1], :]
+    if data_A.shape[0] > data_B.shape[0]:
+        monitor.info('Condition A has %d more samples that Condition B! Trimming Condition B data to size.' % (data_A.shape[0] - data_B.shape[0]))
+        data_A = data_A[0:data_B.shape[0], :]
+    if data_A.shape[0] < data_B.shape[0]:
+        monitor.info('Condition A has %d less samples that Condition B! Trimming Condition B data to size.' % (data_B.shape[0] - data_A.shape[0]))
+        data_B = data_B[0:data_A.shape[0], :]
 
-    if data_A.shape[1] < data_B.shape[1]:
-        monitor.info('Condition A has %d less samples that Condition B! Trimming Condition B data to size.' % (data_B.shape[1] - data_A.shape[1]))
-        data_B = data_B[:, 0:data_A.shape[1], :]
-
-    if np.count_nonzero(np.isnan(data_A)) > 0:
-        monitor.info('Condition A has %d NaNs. Replacing them with 0' % np.count_nonzero(np.isnan(data_A)))
-        data_A = np.where(np.isnan(data_A), 0, data_A)
-
-    if np.count_nonzero(np.isnan(data_B)) > 0:
-        monitor.info('Condition B has %d NaNs. Replacing them with 0' % np.count_nonzero(np.isnan(data_B)))
-        data_B = np.where(np.isnan(data_B), 0, data_B)
-
-    # b = np.where(np.isnan(a), 0, a)
     print(data_A.shape)
     print(data_B.shape)
+    type(data_A)
 
-    monitor.info('Starting filter')
     filters = CSP(data_A, data_B)
-    monitor.info('Filter done')
-    print(len(filters))
+    print(filters)
 
     monitor.debug('nChannels = ' + str(H.nChannels))
     monitor.debug('nSamples = ' + str(H.nSamples))

@@ -4,20 +4,18 @@ REM it can be copied to any other file name
 set rootdir=%userprofile%\Documents\GitHub\eegsynth
 set module=%~n0
 set inidir=%~dp0
-REM CALL conda activate EEGsynth
-REM CALL %userprofile%\AppData\Local\Continuum\anaconda3\Scripts\activate EEGSynth
 %rootdir%\bin\buffer.exe 1972 -new_console:t:"buffer1972"
 %rootdir%\bin\buffer.exe 1973 -new_console:t:"buffer1973"
-CALL TIMEOUT /T 3
+REM CALL TIMEOUT /T 3
 
-REM python %rootdir%\module\inputcontrol\inputcontrol.py -i %inidir%\inputcontrol.ini -new_console:t:"inputcontrol"
-REM python %rootdir%\module\plotimage\plotimage.py -i %inidir%\plotimage.ini -new_console:t:"plotimage"
-REM python %rootdir%\module\lsl2ft\lsl2ft.py -i %inidir%\lsl2ft.ini -new_console:t:"lsl2ft"
-REM python %rootdir%\module\preprocessing\preprocessing.py -i %inidir%\preprocessing.ini -new_console:t:"preprocessing"
-REM python %rootdir%\module\plotsignal\plotsignal.py -i %inidir%\plotsignal.ini -new_console:t:"plotsignal"
-REM python %rootdir%\module\recordsignal\recordsignal.py -i %inidir%\recordsignal_left.ini -new_console:t:"LEFT_record"
-REM python %rootdir%\module\recordsignal\recordsignal.py -i %inidir%\recordsignal_right.ini -new_console:t:"RIGHT_record"
-REM python %rootdir%\module\delaytrigger\delaytrigger.py -i %inidir%\delaytrigger.ini -new_console:t:"delaytrigger"
+python %rootdir%\module\inputcontrol\inputcontrol.py -i %inidir%\inputcontrol.ini -new_console:t:"inputcontrol"
+python %rootdir%\module\plotimage\plotimage.py -i %inidir%\plotimage.ini -new_console:t:"plotimage"
+python %rootdir%\module\lsl2ft\lsl2ft.py -i %inidir%\lsl2ft.ini -new_console:t:"lsl2ft"
+python %rootdir%\module\preprocessing\preprocessing.py -i %inidir%\preprocessing.ini -new_console:t:"preprocessing"
+python %rootdir%\module\plotsignal\plotsignal.py -i %inidir%\plotsignal.ini -new_console:t:"plotsignal"
+python %rootdir%\module\recordsignal\recordsignal.py -i %inidir%\recordsignal_left.ini -new_console:t:"LEFT_record"
+python %rootdir%\module\recordsignal\recordsignal.py -i %inidir%\recordsignal_right.ini -new_console:t:"RIGHT_record"
+python %rootdir%\module\delaytrigger\delaytrigger.py -i %inidir%\delaytrigger.ini -new_console:t:"delaytrigger"
 
 python %rootdir%\module\csp\csp.py -i %inidir%\csp.ini -new_console:t:"CSP"
 

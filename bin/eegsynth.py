@@ -7,7 +7,7 @@
 #
 # This software is part of the EEGsynth project, see <https://github.com/eegsynth/eegsynth>.
 #
-# Copyright (C) 2019-2020 EEGsynth project
+# Copyright (C) 2019-2022 EEGsynth project
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -80,7 +80,6 @@ def _main():
 
     # ignore the EEGsynth modules that are not implemented in Python but that do have an ini file
     inifiles = [file for file in inifiles if not file.endswith('redis.ini')]
-    inifiles = [file for file in inifiles if not file.endswith('buffer.ini')]
     inifiles = [file for file in inifiles if not file.endswith('openbci2ft.ini')]
 
     # this will contain a list of processes

@@ -1,7 +1,7 @@
 import sys
 import time
 
-from .csp import _setup, _start, _loop_once, _loop_forever, _stop
+from .buffer import _setup, _start, _loop_once, _loop_forever, _stop
 
 class Executable:
     def __init__(self, args=None):

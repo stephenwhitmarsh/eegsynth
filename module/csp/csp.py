@@ -33,6 +33,11 @@ import wave
 import struct
 import glob
 import scipy.linalg as la
+import scipy.signal as signal
+import matplotlib.pyplot as plt
+import matplotlib.colors as colors
+from matplotlib import cm
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 if hasattr(sys, 'frozen'):
     path = os.path.split(sys.executable)[0]
@@ -90,14 +95,18 @@ def _start():
     This uses the global variables from setup and adds a set of global variables
     '''
     global parser, args, config, r, response, patch, name
-    global monitor, filename, fileformat, ext, ft_host, ft_port, ft_output, H, MININT8, MAXINT8, MININT16, MAXINT16, MININT32, MAXINT32, f, chanindx, labels, A
+    global monitor, stepsize, filename, fileformat
     global data_A, filepath_A
     global data_B, filepath_B
+    global scale_lowpass, scale_highpass, scale_notchfilter, offset_lowpass, offset_highpass, offset_notchfilter, scale_filtorder, scale_notchquality, offset_filtorder, offset_notchquality
+    global lpfreq, hpfreq, filtorder, hp, lp
+    global filenames, indx, filenr, filename, f, data, chanindx, filters, cmap, fig, axes, i, ax, im, divider, cax, prefix, icomp, comp, iweight, weight, key
 
     # this can be used to show parameters that have changed
     monitor = EEGsynth.monitor(name=name, debug=patch.getint('general', 'debug'))
 
     # get the options from the configuration file
+    stepsize   = patch.getfloat('general', 'delay')
     filepath_A = patch.getstring('data', 'conditionA')
     filepath_B = patch.getstring('data', 'conditionB')
     fileformat = patch.getstring('data', 'format')
@@ -107,31 +116,13 @@ def _start():
         name, ext = os.path.splitext(filepath_A)
         fileformat = ext[1:]
 
-    monitor.info('Reading data from ' + filepath_A)
-
-    try:
-        ft_host = patch.getstring('fieldtrip', 'hostname')
-        ft_port = patch.getint('fieldtrip', 'port')
-        monitor.success('Trying to connect to buffer on %s:%i ...' % (ft_host, ft_port))
-        ft_output = FieldTrip.Client()
-        ft_output.connect(ft_host, ft_port)
-        monitor.success('Connected to FieldTrip buffer')
-    except:
-        raise RuntimeError('cannot connect to FieldTrip buffer')
-
-    H = FieldTrip.Header()
-
-    MININT8 = -np.power(2., 7)
-    MAXINT8 = np.power(2., 7) - 1
-    MININT16 = -np.power(2., 15)
-    MAXINT16 = np.power(2., 15) - 1
-    MININT32 = -np.power(2., 31)
-    MAXINT32 = np.power(2., 31) - 1
+    hpfreq = patch.getfloat('processing', 'highpassfilter', default=None)
+    lpfreq = patch.getfloat('processing', 'lowpassfilter', default=None)
+    filtorder = patch.getfloat('processing', 'filtorder', default=9)
 
     # there should not be any local variables in this function, they should all be global
     if len(locals()):
         print('LOCALS: ' + ', '.join(locals().keys()))
-
 
 def _loop_once():
     '''Run the main loop once
@@ -142,103 +133,105 @@ def _loop_once():
     global D, stepsize
     global data_A, filepath_A
     global data_B, filepath_B
+    global scale_lowpass, scale_highpass, scale_notchfilter, offset_lowpass, offset_highpass, offset_notchfilter, scale_filtorder, scale_notchquality, offset_filtorder, offset_notchquality
+    global nChannels, fSample, nSamples, labels
+    global lpfreq, hpfreq, filtorder, hp, lp
+    global filenames, indx, filenr, filename, f, data, chanindx, filters, cmap, fig, axes, i, ax, im, divider, cax, prefix, icomp, comp, iweight, weight, key
 
     if fileformat == 'edf':
-        filecount_A = len(glob.glob(filepath_A))
-        monitor.info('Condition A: found %d files' % filecount_A)
-        for filenr, filename in enumerate(glob.glob(filepath_A)):
+
+        filenames = glob.glob(filepath_A) + glob.glob(filepath_B)
+        indx      = np.concatenate(   (  np.zeros(len(glob.glob(filepath_A))), np.ones(len(glob.glob(filepath_B)))  )  )
+        monitor.info('Found %d files for condition A, and %d files for condition B' % (len(glob.glob(filepath_A)), len(glob.glob(filepath_B))))
+
+        # get info about available recordings
+        nChannels   = []
+        fSample     = []
+        nSamples    = []
+        for filenr, filename in enumerate(filenames):
+            f = EDF.EDFReader()
+            f.open(filename)
+
+            if any(np.diff(f.getSignalFreqs())):
+                raise AssertionError('unequal SignalFreqs in recording')
+            if any(np.diff(f.getNSamples())):
+                raise AssertionError('unequal NSamples in recording')
+
+            nChannels.append(len(f.getSignalFreqs()))
+            nSamples.append(f.getNSamples()[0])
+            fSample.append(f.getSignalFreqs()[0])
+            monitor.info('%d channels with %d samples at %d Hz found in: %s' % (nChannels[-1], nSamples[-1], fSample[-1], filename))
+            f.close()
+
+        if any(np.diff(nChannels)):
+            raise AssertionError('Different number of channels in files!')
+
+        if any(np.diff(fSample)):
+            raise AssertionError('Different samplerates in files!')
+
+        if any(np.diff(nSamples)):
+            monitor.info('Different number of samples in files, will only read the minimum of (%d samples)' % (min(nSamples)))
+
+        # read condition A
+        print('Creating data structure Condition A with dimensions: %d %d %d' % (len(filenames), nChannels[0], min(nSamples)))
+        data = np.ndarray(shape=(len(filenames), nChannels[0], min(nSamples)), dtype=np.float32)
+        for filenr, filename in enumerate(filenames):
             with open(filename, 'r') as f:
-                monitor.info('Condition A: adding file ' + filename)
+                monitor.info('Adding condition %d: %s' % (indx[filenr], filename))
                 f = EDF.EDFReader()
                 f.open(filename)
-                for chanindx in range(f.getNSignals()):
-                    if f.getSignalFreqs()[chanindx] != f.getSignalFreqs()[0]:
-                        raise AssertionError('unequal SignalFreqs')
-                    if f.getNSamples()[chanindx] != f.getNSamples()[0]:
-                        raise AssertionError('unequal NSamples')
-
-                H.nChannels = len(f.getSignalFreqs())
-                H.fSample = f.getSignalFreqs()[0]
-                H.nSamples = f.getNSamples()[0]
-                H.nEvents = 0
-                H.dataType = FieldTrip.DATATYPE_FLOAT32
-
-                # the channel labels will be written to the buffer
-                labels = f.getSignalTextLabels()
 
                 # read all the data from the file
-                data_A = np.ndarray(shape=(filecount_A, H.nChannels, H.nSamples), dtype=np.float32)
-                for chanindx in range(H.nChannels):
-                    monitor.debug('reading channel ' + str(chanindx))
-                    data_A[filenr, chanindx, :] = f.readSignal(chanindx).T
+                for chanindx in range(nChannels[0]):
+                    data[filenr][chanindx, :] = f.readSignal(chanindx)[0:min(nSamples)]
+                    data[filenr, chanindx, :] = data[filenr, chanindx, :] - data[filenr, chanindx, :].mean(axis = 0)
+
+                    if hpfreq:
+                        monitor.debug('Applying highpassfilter at %.1f Hertz' % (hpfreq))
+                        data[filenr, chanindx, :] = EEGsynth.butter_highpass_filter(data[filenr, chanindx, :], hpfreq, int(fSample[0]), filtorder)
+
+                    if lpfreq:
+                        monitor.debug('Applying lowpassfilter at %.1f Hertz' % (lpfreq))
+                        data[filenr, chanindx, :] = EEGsynth.butter_lowpass_filter(data[filenr, chanindx, :], lpfreq, int(fSample[0]), filtorder)
+
                 f.close()
-
-        filecount_B = len(glob.glob(filepath_B))
-        monitor.info('Condition A: found %d files' % filecount_B)
-        for filenr, filename in enumerate(glob.glob(filepath_B)):
-            with open(filename, 'r') as f:
-                monitor.info('Condition B: adding file ' + filename)
-                f = EDF.EDFReader()
-                f.open(filename)
-                for chanindx in range(f.getNSignals()):
-                    if f.getSignalFreqs()[chanindx] != f.getSignalFreqs()[0]:
-                        raise AssertionError('unequal SignalFreqs')
-                    if f.getNSamples()[chanindx] != f.getNSamples()[0]:
-                        raise AssertionError('unequal NSamples')
-
-                H.nChannels = len(f.getSignalFreqs())
-                H.fSample = f.getSignalFreqs()[0]
-                H.nSamples = f.getNSamples()[0]
-                H.nEvents = 0
-                H.dataType = FieldTrip.DATATYPE_FLOAT32
-
-                # the channel labels will be written to the buffer
-                labels = f.getSignalTextLabels()
-
-                # read all the data from the file
-                data_B = np.ndarray(shape=(filecount_B, H.nChannels, H.nSamples), dtype=np.float32)
-                for chanindx in range(H.nChannels):
-                    monitor.debug('reading channel ' + str(chanindx))
-                    data_B[filenr, chanindx, :] = f.readSignal(chanindx).T
-                f.close()
-
 
     else:
         raise NotImplementedError('unsupported file format')
 
-    if data_A.shape[1] > data_B.shape[1]:
-        monitor.info('Condition A has %d more samples that Condition B! Trimming Condition B data to size.' % (data_A.shape[1] - data_B.shape[1]))
-        data_A = data_A[:, 0:data_B.shape[1], :]
+    # plot timecourses for debugging
+    for filenr, filename in enumerate(filenames):
+        fig = plt.figure(filenr+1)
+        for chanindx in range(nChannels[0]):
+            print('file nr. %d channel nr. %d' % (filenr, chanindx))
+            plt.subplot(8, 1, chanindx+1)
+            plt.plot(data[filenr][chanindx, :])
+        plt.show()
 
-    if data_A.shape[1] < data_B.shape[1]:
-        monitor.info('Condition A has %d less samples that Condition B! Trimming Condition B data to size.' % (data_B.shape[1] - data_A.shape[1]))
-        data_B = data_B[:, 0:data_A.shape[1], :]
+    filters = CSP(data[indx==0], data[indx==1])
 
-    if np.count_nonzero(np.isnan(data_A)) > 0:
-        monitor.info('Condition A has %d NaNs. Replacing them with 0' % np.count_nonzero(np.isnan(data_A)))
-        data_A = np.where(np.isnan(data_A), 0, data_A)
+    # plot CSP for debugging
+    cmap = cm.coolwarm
+    fig, axes = plt.subplots(1,2, figsize=(8,8))
+    for i, ax in enumerate(axes.flat):
+        im = ax.imshow(filters[i], norm=colors.CenteredNorm(0), cmap = cmap)
+        # pc = ax.imshow(filters[i])
+        # plt.colorbar(pc, ax=ax)
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        plt.colorbar(im, cax=cax)
+        # pc = ax.pcolormesh(filters[i], norm=colors.CenteredNorm(), cmap=cmap)
+        # fig.colorbar(pc, ax=ax2)
+        ax.set_title('CSP %d' % i)
+    plt.show()
 
-    if np.count_nonzero(np.isnan(data_B)) > 0:
-        monitor.info('Condition B has %d NaNs. Replacing them with 0' % np.count_nonzero(np.isnan(data_B)))
-        data_B = np.where(np.isnan(data_B), 0, data_B)
-
-    # b = np.where(np.isnan(a), 0, a)
-    print(data_A.shape)
-    print(data_B.shape)
-
-    monitor.info('Starting filter')
-    filters = CSP(data_A, data_B)
-    monitor.info('Filter done')
-    monitor.info('%d filters' % len(filters))
-
-    for i, a in enumerate(filters[0]):
-        monitor.info('Dimension {0} has length {1}'.format(i, len(a)))
-
-
-    monitor.debug('nChannels = ' + str(H.nChannels))
-    monitor.debug('nSamples = ' + str(H.nSamples))
-    monitor.debug('fSample = ' + str(H.fSample))
-    monitor.debug('labels = ' + str(labels))
+    # only write first filter (only 2 state solution)
+    prefix = 'csp'
+    for icomp, comp in enumerate(filters[0]):
+        for iweight, weight in enumerate(filters[0][icomp, :]):
+            key = '{prefix}.{icomp}.{iweight}'.format(prefix=prefix, icomp=icomp+1, iweight=iweight+1)
+            patch.setvalue(key, float(weight))
+            monitor.debug(key + ' = ' + str(weight))
 
     # there should not be any local variables in this function, they should all be global
     if len(locals()):
@@ -254,7 +247,9 @@ def _loop_forever():
         start = time.time()
 
         monitor.loop()
-        _loop_once()
+        enabled = patch.getint('processing', 'enable', default=None)
+        if enabled:
+            _loop_once()
 
         elapsed = time.time() - start
         naptime = stepsize - elapsed
@@ -262,11 +257,11 @@ def _loop_forever():
             # this approximates the real time streaming speed
             time.sleep(naptime)
 
-
 def _stop():
     '''Stop and clean up on SystemExit, KeyboardInterrupt
     '''
     sys.exit()
+
 
 def CSP(*tasks):
     if len(tasks) < 2:
@@ -292,53 +287,53 @@ def CSP(*tasks):
                     not_Rx += covarianceMatrix(tasks[not_x][t])
                     count += 1
             not_Rx = not_Rx / count
-            print(Rx)
-            print("---")
-            print(not_Rx)
+
 			# Find the spatial filter SFx
             SFx = spatialFilter(Rx,not_Rx)
             filters += (SFx,)
-
 			# Special case: only two tasks, no need to compute any more mean variances
             if len(tasks) == 2:
                 filters += (spatialFilter(not_Rx,Rx),)
                 break
-            return filters
+        return filters
+
 
 # covarianceMatrix takes a matrix A and returns the covariance matrix, scaled by the variance
 def covarianceMatrix(A):
-    print(A.shape)
     Ca = np.dot(A,np.transpose(A))/np.trace(np.dot(A,np.transpose(A)))
     return Ca
 
+
 # spatialFilter returns the spatial filter SFa for mean covariance matrices Ra and Rb
 def spatialFilter(Ra,Rb):
-	R = Ra + Rb
-	E,U = la.eig(R)
+    R = Ra + Rb
+    E,U = la.eig(R)
 
-	# CSP requires the eigenvalues E and eigenvector U be sorted in descending order
-	ord = np.argsort(E)
-	ord = ord[::-1] # argsort gives ascending order, flip to get descending
-	E = E[ord]
-	U = U[:,ord]
+    # CSP requires the eigenvalues E and eigenvector U be sorted in descending order
+    ord = np.argsort(E)
+    ord = ord[::-1] # argsort gives ascending order, flip to get descending
+    E = E[ord]
+    U = U[:,ord]
 
 	# Find the whitening transformation matrix
-	P = np.dot(np.sqrt(la.inv(np.diag(E))),np.transpose(U))
+    P = np.dot(np.sqrt(la.inv(np.diag(E))),np.transpose(U))
 
 	# The mean covariance matrices may now be transformed
-	Sa = np.dot(P,np.dot(Ra,np.transpose(P)))
-	Sb = np.dot(P,np.dot(Rb,np.transpose(P)))
+    Sa = np.dot(P,np.dot(Ra,np.transpose(P)))
+    Sb = np.dot(P,np.dot(Rb,np.transpose(P)))
 
 	# Find and sort the generalized eigenvalues and eigenvector
-	E1,U1 = la.eig(Sa,Sb)
-	ord1 = np.argsort(E1)
-	ord1 = ord1[::-1]
-	E1 = E1[ord1]
-	U1 = U1[:,ord1]
+    E1,U1 = la.eig(Sa,Sb)
+    ord1 = np.argsort(E1)
+    ord1 = ord1[::-1]
+    E1 = E1[ord1]
+    U1 = U1[:,ord1]
 
-	# The projection matrix (the spatial filter) may now be obtained
-	SFa = np.dot(np.transpose(U1),P)
-	return SFa.astype(np.float32)
+    # The projection matrix (the spatial filter) may now be obtained
+    SFa = np.dot(np.transpose(U1),P)
+
+    return SFa.astype(np.float32)
+
 
 if __name__ == '__main__':
     _setup()

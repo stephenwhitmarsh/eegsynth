@@ -95,6 +95,10 @@ def _start():
     MAXINT16 = 0xffff / 2 - 1
     MININT32 = -0xffffffff / 2 - 1
     MAXINT32 = 0xffffffff / 2 - 1
+    MININT16 = -np.power(2, 15)
+    MAXINT16 = np.power(2, 15) - 1 # EDF values should be in the range -32768 to 32767 (no float)
+    MININT32 = -np.power(2.0, 31)
+    MAXINT32 = np.power(2.0, 31)
 
     # get the options from the configuration file
     debug = patch.getint('general', 'debug')

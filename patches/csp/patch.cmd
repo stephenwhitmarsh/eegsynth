@@ -19,6 +19,9 @@ python %rootdir%\module\recordsignal\recordsignal.py -i %inidir%\recordsignal_le
 python %rootdir%\module\recordsignal\recordsignal.py -i %inidir%\recordsignal_right.ini -new_console:t:"RIGHT_record"
 python %rootdir%\module\delaytrigger\delaytrigger.py -i %inidir%\delaytrigger.ini -new_console:t:"delaytrigger"
 
+REM python %rootdir%\module\csp\csp.py -i %inidir%\csp.ini -new_console:t:"CSP"
+
+
 REM python %rootdir%\module\spectral\spectral.py -i %inidir%\spectral.ini -new_console:t:"spectral"
 REM python %rootdir%\module\historycontrol\historycontrol.py -i %inidir%\historycontrol.ini -new_console:t:"historycontrol"
 REM python %rootdir%\module\postprocessing\postprocessing.py -i %inidir%\postprocessing.ini -new_console:t:"postprocessing"
@@ -31,4 +34,5 @@ REM python %rootdir%\module\inputmidi\inputmidi.py -i %inidir%\inputmidi.ini -ne
 REM python %rootdir%\module\outputosc\outputosc.py -i %inidir%\outputosc.ini -new_console:t:"outputosc"
 REM python %rootdir%\module\outputosc\outputosc.py -i %inidir%\outputosc2.ini -new_console:t:"outputosc2"
 
+REM keep the command window open for debugging
 pause

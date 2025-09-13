@@ -1,4 +1,4 @@
-# Installation instructions for Mac macOS
+# Installation instructions for macOS
 
 NOTE: the general installation instructions using Anaconda should cover most of the installation, the notes below might be outdated and are probably not needed any more.
 
@@ -101,35 +101,20 @@ To make sure the Python package manager is up to date, you should do
 pip install --upgrade pip
 ```
 
-Subsequently you can install the Python modules with `pip install eegsynth` or install each of the dependencies one by one using
+Subsequently you can install EEGsynth and its dependencies with `pip install eegsynth`. A number of dependencies can be installed one-by-one using
 
 ```
 pip install bitalino
-pip install colorama
-pip install configparser
-pip install fuzzywuzzy[speedup]
-pip install matplotlib
 pip install mido
-pip install nilearn
-pip install numpy
-pip install paho-mqtt  
-pip install pyaudio
-pip install pylsl
-pip install pyqtgraph
-pip install pyserial
-pip install pyzmq
-pip install redis
-pip install scipy
 pip install sklearn
-pip install termcolor
 pip install pyOSC           # for Python <= 3.4
 pip install python-osc      # for Python >= 3.5
 pip install python-rtmidi   # for Python >= 3.5
 ```
 
-The graphical user interfaces of `plotsignal` and `plotcontrol` are implemented with pyqtgraph, which uses either PyQt4, PyQt5 or PySide.
+The graphical user interfaces of `plotsignal`, `plotcontrol`, `plotspectral` and `plottrigger` are implemented with pyqtgraph, which uses either PyQt5, PyQt6 or PySide.
 
-When using Anaconda and Python2 or Python3, the bindings between Python and Qt can be installed as follows:
+When using Anaconda, the bindings between Python and Qt can be installed as follows:
 
 ```
 conda install pyqt
